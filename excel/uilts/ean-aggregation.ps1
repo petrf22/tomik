@@ -20,7 +20,8 @@ try {
   $wb = $excel.Workbooks.Add()
   $ws = $wb.sheets.item(1)
 
-  $ws.Cells(1, 1).Value2 = $wsOrig.Cells(1, 1).Value2
+  $ws.Cells.Item(1, 1).NumberFormat = "@"
+  $ws.Cells.Item(1, 1).Value = $wsOrig.Cells.Item(1, 1).Text
 
   $col = 1
   $row = 2
@@ -56,26 +57,22 @@ try {
       continue
     }
 
+    $ws.Cells.Item($row, $col).NumberFormat = "@"
     $ws.Cells.Item($row, $col).Value = $ean
 
     $col++
     $colOrig++
 
-    While($true) {
-      try {
-        $range = $wsOrig.Range($wsOrig.Cells($rowOrig, $colOrig), $wsOrig.Cells($rowOrig, $wsOrig.UsedRange.columns.count))
-        $index = $excel.WorksheetFunction.Match($true,$excel.WorksheetFunction.IsNumber($range),0)
-        # Write-Host "index: $($index) $($rowOrig):$($colOrig)  $($row):$($col)"
+    $range = $wsOrig.Range($wsOrig.Cells($rowOrig, $colOrig), $wsOrig.Cells($rowOrig, $wsOrig.UsedRange.columns.count))
+    $arrayIsNumber = $excel.WorksheetFunction.IsNumber($range)
 
-        $ws.Cells.Item($row, $col).Value = $wsOrig.Cells.Item(1, $colOrig + $index - 1).Text
-
+    foreach ($item in $arrayIsNumber) {
+      if ($item -eq $True) {
+        $ws.Cells.Item($row, $col).NumberFormat = "@"
+        $ws.Cells.Item($row, $col).Value = $wsOrig.Cells.Item(1, $colOrig).Text
         $col++
-        $colOrig += $index
-      } catch {
-        # error
-        # Write-Host "error"
-        break
       }
+      $colOrig++
     }
 
     $lastEan = $ean
