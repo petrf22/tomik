@@ -47,7 +47,7 @@ try {
   $startDate = Get-Date
   $estimateText = ''
   #$origRowsCount = $wsOrig.UsedRange.rows.count
-  $colFirstEan = $wsOrig.Columns($colFirstEanLetter).Column
+  $colFirstEan = 2 # $wsOrig.Columns($colFirstEanLetter).Column
 
   for ($rowOrig = 2; $rowOrig -le $origRowsCount; $rowOrig++)
   {
