@@ -1,7 +1,12 @@
+# Proměnná $colLastNonEanLetter obsahuje poslední sloupec který není EAN kódem (po něm následují EAN kódy)
+
 $excel = New-Object -Com Excel.Application
 $excel.Visible = $true
 $wbOrig = $null
 $wb = $null
+$colLastNonEanLetter = 'Y'
+$xlDown = -4121
+$xlToRight = -4161
 
 try {
   #$importFile = 'c:\Users\Petr\Downloads\Sesit1comp.xlsx'
@@ -13,6 +18,15 @@ try {
 
   $wbOrig = $excel.Workbooks.Open($importFile)
   $wsOrig = $wbOrig.sheets.item(1)
+
+  # Odstrannění NON EAN sloupců
+  $wsOrig.Columns("B:$($colLastNonEanLetter)").Delete()
+
+  # Odstrannění duplicitních řádků
+  $wsOrig.UsedRange.RemoveDuplicates(1)
+
+  $origRowsCount = $wsOrig.Columns("A:A").End($xlDown).Row
+  $origColsCount = $wsOrig.Rows("1:1").End($xlToRight).Column
 
   # Write-Host $wsOrig.UsedRange.columns.count
   # Write-Host $wsOrig.UsedRange.rows.count
@@ -29,7 +43,8 @@ try {
   $lastEan = ''
   $startDate = Get-Date
   $estimateText = ''
-  $origRowsCount = $wsOrig.UsedRange.rows.count
+  #$origRowsCount = $wsOrig.UsedRange.rows.count
+  $colFirstEan = 2 # $wsOrig.Columns($colFirstEanLetter).Column
 
   for ($rowOrig = 2; $rowOrig -le $origRowsCount; $rowOrig++)
   {
@@ -61,9 +76,10 @@ try {
     $ws.Cells.Item($row, $col).Value = $ean
 
     $col++
-    $colOrig++
+    # $colOrig++
+    $colOrig = $colFirstEan
 
-    $range = $wsOrig.Range($wsOrig.Cells($rowOrig, $colOrig), $wsOrig.Cells($rowOrig, $wsOrig.UsedRange.columns.count))
+    $range = $wsOrig.Range($wsOrig.Cells($rowOrig, $colOrig), $wsOrig.Cells($rowOrig, $origColsCount))
     $arrayIsNumber = $excel.WorksheetFunction.IsNumber($range)
 
     foreach ($item in $arrayIsNumber) {
