@@ -2,39 +2,66 @@
 
 $excel = New-Object -Com Excel.Application
 $excel.Visible = $true
-$wbOrig = $null
-$wb = $null
 $colLastNonEanLetter = 'Y'
 $xlDown = -4121
 $xlToRight = -4161
 
 # Definice třídy
 class Context {
-    [__ComObject]$sheet
+    [Object]$sheet
     [int]$row
     [int]$col
 
-    Context([__ComObject]$sheet) {
+    Context([Object]$sheet) {
         $this.sheet = $sheet
         $this.row = 1
         $this.col = 1
     }
 }
 
-function ConvertTo-Windows1250 {
+function Update-Sheet-1 {
   param (
-      [Parameter(Mandatory=$true)]
-      [string]$Utf8Text
+    [Parameter(Mandatory=$true)] [Context]$ctx,
+    [Parameter(Mandatory=$true)] [Context]$ctxOrig,
+    [Parameter(Mandatory=$true)] [boolean]$isNumber
   )
 
-  # Převod na bajty v UTF-8
-  $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($Utf8Text)
+  if ($isNumber -eq $True) {
+    if ($ctx.sheet.Cells.Item($ctx.row, 1).Text -eq '') {
+      $ctx.sheet.Cells.Item($ctx.row, 1).NumberFormat = "@"
+      $ctx.sheet.Cells.Item($ctx.row, 1).Value = $ctxOrig.sheet.Cells.Item($ctxOrig.row, 1).Text # EAN
+      $ctx.col++
+    }
 
-  # Převod bajtů na text v Windows-1250
-  $windows1250Text = [System.Text.Encoding]::GetEncoding("windows-1250").GetString($utf8Bytes)
+    $ctx.sheet.Cells.Item($ctx.row, $ctx.col) = $ctxOrig.sheet.Cells.Item(1, $ctxOrig.col)
 
-  return $windows1250Text
+    if ($ctx.sheet.Cells.Item(1, $ctx.col).Text -eq '') {
+      $ctx.sheet.Cells.Item(1, $ctx.col).Value = 'EAN ' + ($ctx.col - 1)
+    }
+
+    $ctx.col++
+  }
 }
+
+function Update-Sheet-2 {
+  param (
+    [Parameter(Mandatory=$true)] [Context]$ctx,
+    [Parameter(Mandatory=$true)] [Context]$ctxOrig,
+    [Parameter(Mandatory=$true)] [boolean]$isNumber
+  )
+
+  if ($item -eq $True) {
+    $ctx.sheet.Cells.Item($ctx.row, 1).NumberFormat = "@"
+    $ctx.sheet.Cells.Item($ctx.row, 1).Value = $ctxOrig.sheet.Cells.Item($ctxOrig.row, 1).Text # EAN
+    $ctx.sheet.Cells.Item($ctx.row, 2).NumberFormat = "@"
+    $ctx.sheet.Cells.Item($ctx.row, 2).Value = $ctxOrig.sheet.Cells.Item(1, $ctxOrig.col).Text # Nadpis (EAN) z prvního řádku
+    $ctx.sheet.Cells.Item($ctx.row, 3) = $ctxOrig.sheet.Cells.Item($ctxOrig.row, $ctxOrig.col)
+    $ctx.row++
+  }
+
+  $ctxOrig.col++
+}
+
 
 try {
   $importFile = 'c:\Users\Petr\github\petrf\tomik\excel\uilts\component-export-21012025.xlsx'
@@ -47,25 +74,22 @@ try {
   $excel.Interactive = $false
 
   $wbOrig = $excel.Workbooks.Open($importFile)
+  $ctxOrig = [Context]::new($wbOrig.sheets.item(1))
 
-  # # Odstrannění NON EAN sloupců
-  # $wsOrig.Columns("B:$($colLastNonEanLetter)").Delete()
+  # Odstrannění NON EAN sloupců
+  $ctxOrig.sheet.Columns("B:$($colLastNonEanLetter)").Delete() | out-null
 
-  # # Odstrannění duplicitních řádků
-  # $wsOrig.UsedRange.RemoveDuplicates(1)
+  # Odstrannění duplicitních řádků
+  $ctxOrig.sheet.UsedRange.RemoveDuplicates(1) | out-null
 
-  # $origRowsCount = $wsOrig.Columns("A:A").End($xlDown).Row
-  # $origColsCount = $wsOrig.Rows("1:1").End($xlToRight).Column
+  $origRowsCount = $ctxOrig.sheet.Columns("A:A").End($xlDown).Row
+  $origColsCount = $ctxOrig.sheet.Rows("1:1").End($xlToRight).Column
 
-  # Write-Host $wsOrig.UsedRange.columns.count
-  # Write-Host $wsOrig.UsedRange.rows.count
+  Write-Host $ctxOrig.sheet.UsedRange.columns.count
+  Write-Host $ctxOrig.sheet.UsedRange.rows.count
 
   $wb = $excel.Workbooks.Add()
-  $sheet = $wb.sheets.item(1)
-  $ctx1 = [Context]::new($sheet)
-
-  $sheet = $wb.sheets.item(1)
-  $ctx1.sheet = $sheet
+  $ctx1 = [Context]::new($wb.sheets.item(1))
 
   # Získá poslední list v sešitu
   $lastSheet = $wb.Worksheets.Item($wb.Worksheets.Count)
@@ -74,73 +98,60 @@ try {
   # $newSheet = $workbook.Worksheets.Add([System.Reflection.Missing]::Value, $lastSheet)
   $ctx2 = [Context]::new($wb.Worksheets.Add([System.Reflection.Missing]::Value, $lastSheet))
 
+  #$ctx1.sheet.Select | out-null
+  $wb.Sheets($ctx1.sheet.Name).Select | out-null
+
   # List 1 - První řádek
-  $ctx1.sheet.Cells.Item(1, 1) = $wsOrig.Cells.Item(1, 1)
+  $ctx1.sheet.Cells.Item(1, 1) = $ctxOrig.sheet.Cells.Item(1, 1)
 
   # List 2 - První řádek
-  $ctx2.Cells.Item(1, 1).Value = ConvertTo-Windows1250 -Utf8Text 'Díl'
-  $ctx2.Cells.Item(1, 2).Value = ConvertTo-Windows1250 -Utf8Text 'Materiál'
-  $ctx2.Cells.Item(1, 3).Value = ConvertTo-Windows1250 -Utf8Text 'Množství'
+  $ctx2.sheet.Cells.Item(1, 1).Value = 'Dil'
+  $ctx2.sheet.Cells.Item(1, 2).Value = 'Material'
+  $ctx2.sheet.Cells.Item(1, 3).Value = 'Mnozstvi'
 
-  $ctx1.sheet.Activate
-
-  return
-
-  $row = 2
-  $ean = ''
-  $lastEan = ''
+  $ctx1.row = 2
+  $ctx2.row = 2
   $startDate = Get-Date
   $estimateText = ''
-  #$origRowsCount = $wsOrig.UsedRange.rows.count
-  $colFirstEan = 2 # $wsOrig.Columns($colFirstEanLetter).Column
+  #$origRowsCount = $ctxOrig.sheet.UsedRange.rows.count
+  $colFirstEan = 2 # $ctxOrig.sheet.Columns($colFirstEanLetter).Column
 
-  for ($rowOrig = 2; $rowOrig -le $origRowsCount; $rowOrig++)
+  for ($ctxOrig.row = 2; $ctxOrig.row -le $origRowsCount; $ctxOrig.row++)
   {
-    $colOrig = 1
-    $ean = $wsOrig.Cells($rowOrig, $colOrig).Text
-    # $wsOrig.Cells.Item(1, 1).text
+    $ctxOrig.col = 1
+    $ean = $ctxOrig.sheet.Cells($ctxOrig.row, $ctxOrig.col).Text
+    # $ctxOrig.sheet.Cells.Item(1, 1).text
     # Write-Host "EAN: $($ean)"
-    if ($rowOrig -gt 100 -and $rowOrig % 10 -eq 0) {
+    if ($ctxOrig.row -gt 100 -and $ctxOrig.row % 10 -eq 0) {
       $endDate = Get-Date
       $totalSeconds = $(New-TimeSpan $startDate $endDate).TotalSeconds
-      $rowPerTime = $totalSeconds / $rowOrig
-      $estimateSec = ($origRowsCount - $rowOrig) * $rowPerTime
+      $rowPerTime = $totalSeconds / $ctxOrig.row
+      $estimateSec = ($origRowsCount - $ctxOrig.row) * $rowPerTime
       $estimateTime =  [timespan]::fromseconds($estimateSec)
       $estimateText = "(odhad: $("{0:hh\:mm\:ss\,fff}" -f $estimateTime))";
     }
 
-    $proc = 100 / $origRowsCount * $rowOrig
+    $proc = 100 / $origRowsCount * $ctxOrig.row
     Write-Progress -Activity "Vydrzte, stroje pracuji za vas ..." -Status "$("{0:N3}" -f [Math]::Round($proc, 3))% $($estimateText)" `
-                   -PercentComplete $proc -CurrentOperation "Radek cislo $($rowOrig) z $($origRowsCount), EAN: $($ean)"
+                   -PercentComplete $proc -CurrentOperation "Radek cislo $($ctxOrig.row) z $($origRowsCount), EAN: $($ean)"
 
-    if ($ean -eq $lastEan) {
-      # Duplicitní EAN
-      # Write-Host "Duplicitní EAN: $($ean)"
-      continue
-    }
+    $ctx1.col = 1
+    $ctx2.col = 1
 
-    $col = 1
-    $ws.Cells.Item($row, $col).NumberFormat = "@"
-    $ws.Cells.Item($row, $col).Value = $ean
+    # $ctxOrig.col++
+    $ctxOrig.col = $colFirstEan
 
-    $col++
-    # $colOrig++
-    $colOrig = $colFirstEan
-
-    $range = $wsOrig.Range($wsOrig.Cells($rowOrig, $colOrig), $wsOrig.Cells($rowOrig, $origColsCount))
+    $range = $ctxOrig.sheet.Range($ctxOrig.sheet.Cells($ctxOrig.row, $ctxOrig.col), $ctxOrig.sheet.Cells($ctxOrig.row, $origColsCount))
     $arrayIsNumber = $excel.WorksheetFunction.IsNumber($range)
 
     foreach ($item in $arrayIsNumber) {
-      if ($item -eq $True) {
-        $ws.Cells.Item($row, $col).NumberFormat = "@"
-        $ws.Cells.Item($row, $col).Value = $wsOrig.Cells.Item(1, $colOrig).Text
-        $col++
-      }
-      $colOrig++
+      Update-Sheet-1 -ctx $ctx1 -ctxOrig $ctxOrig -isNumber $item
+      Update-Sheet-2 -ctx $ctx2 -ctxOrig $ctxOrig -isNumber $item
+
+      $ctxOrig.col++
     }
 
-    $lastEan = $ean
-    $row++
+    $ctx1.row++
   }
 } finally {
   $excel.Interactive = $true
